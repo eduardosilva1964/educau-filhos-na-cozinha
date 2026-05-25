@@ -296,7 +296,7 @@ function ImportModal({ onClose, onImported }) {
   };
 
   const callAPI = async (content) => {
-    const res = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1500,messages:[{role:"user",content}]})});
+    const res = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1500,messages:[{role:"user",content}]})});
     const data = await res.json();
     if(data.error) throw new Error(data.error.message);
     const raw = data.content.map(b=>b.text||"").join("").trim();
