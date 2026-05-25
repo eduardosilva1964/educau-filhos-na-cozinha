@@ -298,9 +298,13 @@ function ImportModal({ onClose, onImported }) {
   const callAPI = async (content) => {
     const res = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1500,messages:[{role:"user",content}]})});
     const data = await res.json();
-    if(data.error) throw new Error(data.error.message);
+    if(data.error) throw new Error(`API error: ${data.error.type} — ${data.error.message}`);
     const raw = data.content.map(b=>b.text||"").join("").trim();
-    return JSON.parse(raw.replace(/```json|```/g,"").trim());
+    try {
+      return JSON.parse(raw.replace(/```json|```/g,"").trim());
+    } catch(e) {
+      throw new Error(`JSON inválido: ${raw.slice(0,200)}`);
+    }
   };
 
   const handleAnalyze = async () => {
@@ -320,8 +324,8 @@ function ImportModal({ onClose, onImported }) {
       }
       setParsed(sanitize(result));
       setStage("review");
-    } catch {
-      setErrorMsg(mode==="foto"?"Tente fotos mais nítidas e bem iluminadas.":mode==="pdf"?"Verifique se o PDF tem texto selecionável.":"Verifique se é um arquivo .docx válido.");
+    } catch(err) {
+      setErrorMsg(err.message || (mode==="foto"?"Tente fotos mais nítidas e bem iluminadas.":mode==="pdf"?"Verifique se o PDF tem texto selecionável.":"Verifique se é um arquivo .docx válido."));
       setStage("error");
     }
   };
