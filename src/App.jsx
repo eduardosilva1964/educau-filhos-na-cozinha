@@ -462,6 +462,7 @@ function ImportModal({ onClose, onImported }) {
             <div>
               <div style={{background:"#f4faf4",border:"1px solid #b8d8b8",borderRadius:12,padding:"12px 16px",marginBottom:20,fontSize:13,color:"#2a5a2a"}}>✅ Receita extraída! Revise antes de salvar.</div>
               <div style={{marginBottom:14}}><Lbl>Nome</Lbl><input value={parsed.name} onChange={e=>setParsed({...parsed,name:e.target.value})} style={fs}/></div>
+              <div style={{marginBottom:14}}><Lbl>Fonte / Inspiração</Lbl><input value={parsed.fonte||""} onChange={e=>setParsed({...parsed,fonte:e.target.value})} placeholder="Ex: Vovó, Livro da Ana Maria, Instagram..." style={fs}/></div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
                 <div><Lbl>Categoria</Lbl><select value={parsed.category} onChange={e=>setParsed({...parsed,category:e.target.value})} style={fs}>{["Entrada","Prato Principal","Sobremesa","Lanche","Bebida","Outro"].map(c=><option key={c}>{c}</option>)}</select></div>
                 <div><Lbl>Complexidade</Lbl><select value={parsed.complexity} onChange={e=>setParsed({...parsed,complexity:e.target.value})} style={fs}><option value="fácil">Fácil</option><option value="médio">Médio</option><option value="difícil">Difícil</option></select></div>
@@ -544,8 +545,68 @@ function RecipeShoppingTab({ recipe }) {
   );
 }
 
+// ─── EDIT RECIPE MODAL ───────────────────────────────────────────────────────
+function EditRecipeModal({ recipe, onClose, onSave }) {
+  const [form, setForm] = useState({
+    ...recipe,
+    ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients.join("\n") : "",
+    steps: Array.isArray(recipe.steps) ? recipe.steps.join("\n") : "",
+  });
+  const set = (k,v) => setForm(f=>({...f,[k]:v}));
+  const photoInputRef = useRef();
+
+  const handleSave = () => {
+    if(!form.name.trim()) return;
+    onSave({
+      ...form,
+      time: parseInt(form.time)||0,
+      servings: parseInt(form.servings)||1,
+      ingredients: form.ingredients.split("\n").map(s=>s.trim()).filter(Boolean),
+      steps: form.steps.split("\n").map(s=>s.trim()).filter(Boolean),
+    });
+    onClose();
+  };
+
+  const s={width:"100%",padding:"10px 14px",border:`1px solid ${T.borderMid}`,borderRadius:10,fontSize:14,color:T.text,background:T.bgCard,boxSizing:"border-box",fontFamily:T.font,outline:"none"};
+  const L=({children})=><label style={{display:"block",fontSize:12,fontWeight:700,color:T.textMid,marginBottom:6,letterSpacing:0.5,textTransform:"uppercase"}}>{children}</label>;
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(20,14,8,0.78)",zIndex:150,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
+      <div style={{background:T.bgCard,borderRadius:20,maxWidth:500,width:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 24px 64px rgba(0,0,0,0.3)",fontFamily:T.font}} onClick={e=>e.stopPropagation()}>
+        <div style={{background:T.header,padding:"24px 28px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <h2 style={{margin:0,color:T.accentLt,fontSize:"1.2rem"}}>✏️ Editar Receita</h2>
+          <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",borderRadius:"50%",width:32,height:32,cursor:"pointer",color:"#fff",fontSize:18}}>×</button>
+        </div>
+        <div style={{padding:"24px 28px"}}>
+          <div style={{marginBottom:16}}><L>Nome</L><input value={form.name} onChange={e=>set("name",e.target.value)} style={s}/></div>
+          <div style={{marginBottom:16}}><L>Fonte / Inspiração</L><input value={form.fonte||""} onChange={e=>set("fonte",e.target.value)} placeholder="Ex: Vovó, Livro, Instagram..." style={s}/></div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+            <div><L>Categoria</L><select value={form.category} onChange={e=>set("category",e.target.value)} style={{...s,fontSize:13}}>{["Entrada","Prato Principal","Sobremesa","Lanche","Bebida","Outro"].map(c=><option key={c}>{c}</option>)}</select></div>
+            <div><L>Complexidade</L><select value={form.complexity} onChange={e=>set("complexity",e.target.value)} style={{...s,fontSize:13}}><option value="fácil">Fácil</option><option value="médio">Médio</option><option value="difícil">Difícil</option></select></div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+            <div><L>Tempo (min)</L><input type="number" value={form.time} onChange={e=>set("time",e.target.value)} style={s}/></div>
+            <div><L>Porções</L><input type="number" value={form.servings} onChange={e=>set("servings",e.target.value)} style={s}/></div>
+          </div>
+          <div style={{marginBottom:16}}><L>Ingredientes (um por linha)</L><textarea value={form.ingredients} onChange={e=>set("ingredients",e.target.value)} rows={5} style={{...s,fontSize:13,resize:"vertical",lineHeight:1.6}}/></div>
+          <div style={{marginBottom:16}}><L>Modo de Preparo (um passo por linha)</L><textarea value={form.steps} onChange={e=>set("steps",e.target.value)} rows={5} style={{...s,fontSize:13,resize:"vertical",lineHeight:1.6}}/></div>
+          <div style={{marginBottom:16}}><L>Notas</L><textarea value={form.notes||""} onChange={e=>set("notes",e.target.value)} rows={2} style={{...s,fontSize:13,resize:"vertical",lineHeight:1.6}}/></div>
+          <div style={{marginBottom:20}}>
+            <L>💡 Pulo do gato</L>
+            <textarea value={form.dica||""} onChange={e=>set("dica",e.target.value)} rows={2} placeholder="O segredo que faz toda a diferença..." style={{...s,fontSize:13,resize:"vertical",lineHeight:1.6,borderColor:form.dica?T.accentLt:undefined,background:form.dica?"#fff8ee":undefined}}/>
+          </div>
+          <div style={{display:"flex",gap:10}}>
+            <button onClick={onClose} style={{flex:1,padding:"12px",border:`1px solid ${T.borderMid}`,borderRadius:12,background:"transparent",color:T.textSoft,cursor:"pointer",fontSize:14,fontFamily:T.font}}>Cancelar</button>
+            <button onClick={handleSave} style={{flex:2,padding:"12px",border:"none",borderRadius:12,background:T.header,color:T.accentLt,cursor:"pointer",fontSize:14,fontWeight:700,fontFamily:T.font}}>💾 Salvar Alterações</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── RECIPE DETAIL MODAL ──────────────────────────────────────────────────────
-function RecipeModal({ recipe, onClose, onUpdate, onShare }) {
+function RecipeModal({ recipe, onClose, onUpdate, onShare, onEdit }) {
   const [activeTab, setActiveTab] = useState("ingredientes");
   const [photo, setPhoto] = useState(recipe.photo||null);
   const [tested, setTested] = useState(recipe.tested||false);
@@ -565,9 +626,12 @@ function RecipeModal({ recipe, onClose, onUpdate, onShare }) {
           </div>
         )}
         <div style={{background:photo?"transparent":T.header,marginTop:photo?-60:0,padding:"28px 28px 20px",borderRadius:photo?0:"20px 20px 0 0",position:"relative",zIndex:1}}>
-          <div style={{position:"absolute",top:photo?8:16,right:16,display:"flex",gap:8}}>
-            <button onClick={()=>onShare(recipe)} style={{background:"rgba(255,255,255,0.18)",border:"none",borderRadius:20,padding:"6px 12px",cursor:"pointer",color:"#fff",fontSize:12,fontFamily:T.font,display:"flex",alignItems:"center",gap:4}}>
-              ↗ Compartilhar
+          <div style={{position:"absolute",top:photo?8:12,right:12,display:"flex",gap:6,zIndex:2}}>
+            <button onClick={()=>onEdit(recipe)} style={{background:"rgba(255,255,255,0.18)",border:"none",borderRadius:20,padding:"6px 10px",cursor:"pointer",color:"#fff",fontSize:12,fontFamily:T.font,display:"flex",alignItems:"center",gap:3}}>
+              ✏️
+            </button>
+            <button onClick={()=>onShare(recipe)} style={{background:"rgba(255,255,255,0.18)",border:"none",borderRadius:20,padding:"6px 10px",cursor:"pointer",color:"#fff",fontSize:12,fontFamily:T.font,display:"flex",alignItems:"center",gap:3}}>
+              ↗
             </button>
             <button onClick={onClose} style={{background:"rgba(255,255,255,0.18)",border:"none",borderRadius:"50%",width:32,height:32,cursor:"pointer",color:"#fff",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
           </div>
@@ -637,6 +701,15 @@ function RecipeModal({ recipe, onClose, onUpdate, onShare }) {
               <div><strong>Pulo do gato:</strong> {recipe.dica}</div>
             </div>
           )}
+          {/* Botões de ação */}
+          <div style={{display:"flex",gap:10,marginTop:24}}>
+            <button onClick={()=>onEdit(recipe)} style={{flex:1,padding:"12px",border:`1.5px solid ${T.borderMid}`,borderRadius:12,background:"transparent",color:T.textMid,cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:T.font,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              ✏️ Editar receita
+            </button>
+            <button onClick={()=>onShare(recipe)} style={{flex:1,padding:"12px",border:"none",borderRadius:12,background:T.header,color:T.accentLt,cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:T.font,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              ↗ Compartilhar
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -749,6 +822,7 @@ export default function App() {
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [shareRecipe, setShareRecipe] = useState(null);
+  const [editRecipe, setEditRecipe] = useState(null);
 
   const categories = ["todas",...Array.from(new Set(recipes.map(r=>r.category)))];
 
@@ -949,10 +1023,11 @@ export default function App() {
         </div>
       </div>
 
-      {selected&&<RecipeModal recipe={selected} onClose={()=>setSelected(null)} onUpdate={handleUpdate} onShare={r=>{setSelected(null);setShareRecipe(r);}}/>}
+      {selected&&<RecipeModal recipe={selected} onClose={()=>setSelected(null)} onUpdate={handleUpdate} onShare={r=>{setSelected(null);setShareRecipe(r);}} onEdit={r=>{setSelected(null);setEditRecipe(r);}}/>}
       {showAdd&&<AddRecipeModal onClose={()=>setShowAdd(false)} onSave={async r=>{await saveRecipe(r);}}/>}
       {showImport&&<ImportModal onClose={()=>setShowImport(false)} onImported={handleImported}/>}
       {shareRecipe&&<ShareModal recipe={shareRecipe} onClose={()=>setShareRecipe(null)}/>}
+      {editRecipe&&<EditRecipeModal recipe={editRecipe} onClose={()=>setEditRecipe(null)} onSave={async r=>{await handleUpdate(r); setEditRecipe(null);}}/>}
     </div>
   );
 }
