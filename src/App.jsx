@@ -1,4 +1,6 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { db } from "./firebase";
+import { collection, onSnapshot, addDoc, updateDoc, doc, setDoc } from "firebase/firestore";
 
 // ─── TEMA RÚSTICO QUENTE ──────────────────────────────────────────────────────
 const T = {
@@ -296,7 +298,7 @@ function ImportModal({ onClose, onImported }) {
   };
 
   const callAPI = async (content) => {
-    const res = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true","x-api-key":import.meta.env.VITE_ANTHROPIC_KEY},body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:1500,messages:[{role:"user",content}]})});
+    const res = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1500,messages:[{role:"user",content}]})});
     const data = await res.json();
     if(data.error) throw new Error(`API error: ${data.error.type} — ${data.error.message}`);
     const raw = data.content.map(b=>b.text||"").join("").trim();
@@ -710,7 +712,32 @@ function AddRecipeModal({ onClose, onSave }) {
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [recipes, setRecipes] = useState(initialRecipes);
+  const [recipes, setRecipes] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Sincroniza com o Firebase em tempo real
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "receitas"), (snapshot) => {
+      const data = snapshot.docs.map(d => ({ ...d.data(), _fireId: d.id }));
+      setRecipes(data.length > 0 ? data : initialRecipes);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const saveRecipe = async (recipe) => {
+    const { _fireId, ...data } = recipe;
+    if (_fireId) {
+      await updateDoc(doc(db, "receitas", _fireId), data);
+    } else {
+      await addDoc(collection(db, "receitas"), data);
+    }
+  };
+
+  const updateRecipes = (fn) => {
+    // usado apenas localmente para atualizações otimistas
+    setRecipes(prev => typeof fn === "function" ? fn(prev) : fn);
+  };
   const [search, setSearch] = useState("");
   const [searchIngredient, setSearchIngredient] = useState("");
   const [filterComplexity, setFilterComplexity] = useState("todas");
@@ -736,8 +763,8 @@ export default function App() {
     return mS&&mI&&mC&&mT&&mCat&&mTest&&mAuth;
   }),[recipes,search,searchIngredient,filterComplexity,filterTime,filterCategory,filterTested,filterFonte]);
 
-  const handleUpdate = u => { setRecipes(p=>p.map(r=>r.id===u.id?u:r)); setSelected(u); };
-  const handleImported = r => setRecipes(p=>[r,...p]);
+  const handleUpdate = async (u) => { await saveRecipe(u); setSelected(u); };
+  const handleImported = async (r) => { await saveRecipe(r); };
 
   const Chip=({value,current,onClick,label,activeColor})=>(
     <button onClick={()=>onClick(value)} style={{padding:"7px 14px",borderRadius:20,border:"1.5px solid",borderColor:current===value?(activeColor||T.header):T.borderMid,background:current===value?(activeColor||T.header):"transparent",color:current===value?(activeColor?"#fff":T.accentLt):T.textSoft,cursor:"pointer",fontSize:13,fontWeight:current===value?700:400,fontFamily:T.font,whiteSpace:"nowrap",transition:"all 0.18s"}}>{label}</button>
@@ -749,6 +776,23 @@ export default function App() {
   return (
     <div style={{minHeight:"100vh",background:T.bg,fontFamily:T.font}}>
       <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet"/>
+
+      {loading && (
+        <div style={{position:"fixed",inset:0,background:T.header,zIndex:999,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
+          <svg width="80" height="60" viewBox="0 0 160 96" fill="none">
+            <path d="M52 28 Q47 18 52 8" stroke="#d4a56a" strokeWidth="2.4" strokeLinecap="round" opacity="0.65"/>
+            <path d="M80 23 Q75 13 80 3" stroke="#d4a56a" strokeWidth="2.4" strokeLinecap="round"/>
+            <path d="M108 28 Q103 18 108 8" stroke="#d4a56a" strokeWidth="2.4" strokeLinecap="round" opacity="0.65"/>
+            <path d="M36 44 Q36 34 80 34 Q124 34 124 44 L122 50 Q80 50 38 50 Z" fill="#7a3f18"/>
+            <rect x="68" y="27" width="24" height="10" rx="5" fill="#7a3f18"/>
+            <path d="M38 50 Q36 82 80 82 Q124 82 122 50 Z" fill="#5a3010"/>
+            <path d="M38 62 C38 62 28 62 24 58 C20 54 20 48 24 45 C26 43 29 43 31 45 C33 43 36 43 38 45 C40 48 39 53 36 56 Z" fill="#d4a56a" opacity="0.85"/>
+            <path d="M122 62 C122 62 132 62 136 58 C140 54 140 48 136 45 C134 43 131 43 129 45 C127 43 124 43 122 45 C120 48 121 53 124 56 Z" fill="#d4a56a" opacity="0.85"/>
+          </svg>
+          <div style={{color:T.accentLt,fontFamily:T.fontDisplay,fontSize:"1.4rem",fontWeight:700}}>EduCau & Filhos</div>
+          <div style={{color:T.textSoft,fontSize:12,letterSpacing:3,textTransform:"uppercase"}}>carregando receitas...</div>
+        </div>
+      )}
 
       {/* ── HEADER ── */}
       <div style={{background:T.header,padding:"32px 24px 28px",textAlign:"center"}}>
@@ -906,7 +950,7 @@ export default function App() {
       </div>
 
       {selected&&<RecipeModal recipe={selected} onClose={()=>setSelected(null)} onUpdate={handleUpdate} onShare={r=>{setSelected(null);setShareRecipe(r);}}/>}
-      {showAdd&&<AddRecipeModal onClose={()=>setShowAdd(false)} onSave={r=>setRecipes(p=>[...p,r])}/>}
+      {showAdd&&<AddRecipeModal onClose={()=>setShowAdd(false)} onSave={async r=>{await saveRecipe(r);}}/>}
       {showImport&&<ImportModal onClose={()=>setShowImport(false)} onImported={handleImported}/>}
       {shareRecipe&&<ShareModal recipe={shareRecipe} onClose={()=>setShareRecipe(null)}/>}
     </div>
