@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { db } from "./firebase";
+import { db, auth } from "./firebase";
 import { collection, onSnapshot, addDoc, updateDoc, doc, setDoc } from "firebase/firestore";
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 
 // ─── TEMA RÚSTICO QUENTE ──────────────────────────────────────────────────────
 const T = {
@@ -606,13 +607,14 @@ function EditRecipeModal({ recipe, onClose, onSave }) {
 }
 
 // ─── RECIPE DETAIL MODAL ──────────────────────────────────────────────────────
-function RecipeModal({ recipe, onClose, onUpdate, onShare, onEdit }) {
+function RecipeModal({ recipe, user, onClose, onUpdate, onShare, onEdit }) {
   const [activeTab, setActiveTab] = useState("ingredientes");
   const [photo, setPhoto] = useState(recipe.photo||null);
   const [tested, setTested] = useState(recipe.tested||false);
   const photoInputRef = useRef();
   if(!recipe) return null;
   const col = complexityColors[recipe.complexity];
+  const canEdit = !!user;
   const handlePhotoChange = val => { setPhoto(val); onUpdate({...recipe,photo:val,tested}); };
   const handleTestedToggle = () => { const v=!tested; setTested(v); onUpdate({...recipe,photo,tested:v}); };
 
@@ -627,9 +629,11 @@ function RecipeModal({ recipe, onClose, onUpdate, onShare, onEdit }) {
         )}
         <div style={{background:photo?"transparent":T.header,marginTop:photo?-60:0,padding:"28px 28px 20px",borderRadius:photo?0:"20px 20px 0 0",position:"relative",zIndex:1}}>
           <div style={{position:"absolute",top:photo?8:12,right:12,display:"flex",gap:6,zIndex:2}}>
-            <button onClick={()=>onEdit(recipe)} style={{background:"rgba(255,255,255,0.18)",border:"none",borderRadius:20,padding:"6px 10px",cursor:"pointer",color:"#fff",fontSize:12,fontFamily:T.font,display:"flex",alignItems:"center",gap:3}}>
-              ✏️
-            </button>
+            {canEdit && (
+              <button onClick={()=>onEdit(recipe)} style={{background:"rgba(255,255,255,0.18)",border:"none",borderRadius:20,padding:"6px 10px",cursor:"pointer",color:"#fff",fontSize:12,fontFamily:T.font,display:"flex",alignItems:"center",gap:3}}>
+                ✏️
+              </button>
+            )}
             <button onClick={()=>onShare(recipe)} style={{background:"rgba(255,255,255,0.18)",border:"none",borderRadius:20,padding:"6px 10px",cursor:"pointer",color:"#fff",fontSize:12,fontFamily:T.font,display:"flex",alignItems:"center",gap:3}}>
               ↗
             </button>
@@ -641,9 +645,13 @@ function RecipeModal({ recipe, onClose, onUpdate, onShare, onEdit }) {
             <span style={{background:col.bg,color:col.text,border:`1px solid ${col.border}`,borderRadius:20,padding:"4px 12px",fontSize:12,fontWeight:600}}>{recipe.complexity.charAt(0).toUpperCase()+recipe.complexity.slice(1)}</span>
             <span style={{background:"rgba(255,255,255,0.12)",color:"#e8d5b7",borderRadius:20,padding:"4px 12px",fontSize:12}}>⏱ {timeLabel(recipe.time)}</span>
             <span style={{background:"rgba(255,255,255,0.12)",color:"#e8d5b7",borderRadius:20,padding:"4px 12px",fontSize:12}}>👥 {recipe.servings} porções</span>
-            <button onClick={handleTestedToggle} style={{background:tested?"#2d6a2d":"rgba(255,255,255,0.12)",color:tested?"#b8f0b8":"#e8d5b7",border:tested?"1px solid #4a9a4a":"1px solid rgba(255,255,255,0.2)",borderRadius:20,padding:"4px 12px",fontSize:12,cursor:"pointer",fontFamily:T.font,fontWeight:tested?700:400}}>
-              {tested?"✅ Testada":"○ Não testada"}
-            </button>
+            {canEdit ? (
+              <button onClick={handleTestedToggle} style={{background:tested?"#2d6a2d":"rgba(255,255,255,0.12)",color:tested?"#b8f0b8":"#e8d5b7",border:tested?"1px solid #4a9a4a":"1px solid rgba(255,255,255,0.2)",borderRadius:20,padding:"4px 12px",fontSize:12,cursor:"pointer",fontFamily:T.font,fontWeight:tested?700:400}}>
+                {tested?"✅ Testada":"○ Não testada"}
+              </button>
+            ) : tested ? (
+              <span style={{background:"#2d6a2d",color:"#b8f0b8",border:"1px solid #4a9a4a",borderRadius:20,padding:"4px 12px",fontSize:12,fontWeight:700}}>✅ Testada</span>
+            ) : null}
           </div>
         </div>
         <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,background:T.bgMuted}}>
@@ -676,17 +684,24 @@ function RecipeModal({ recipe, onClose, onUpdate, onShare, onEdit }) {
           )}
           {activeTab==="foto" && (
             <div>
-              <input ref={photoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>handlePhotoChange(ev.target.result);r.readAsDataURL(f);}}/>
+              {canEdit && <input ref={photoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>handlePhotoChange(ev.target.result);r.readAsDataURL(f);}}/>}
               {photo ? (
                 <div style={{position:"relative"}}>
                   <img src={photo} alt="" style={{width:"100%",maxHeight:220,objectFit:"cover",borderRadius:12,display:"block"}}/>
-                  <button onClick={()=>handlePhotoChange(null)} style={{position:"absolute",top:8,right:8,background:"rgba(0,0,0,0.55)",border:"none",borderRadius:"50%",width:28,height:28,cursor:"pointer",color:"#fff",fontSize:14}}>×</button>
-                  <button onClick={()=>photoInputRef.current.click()} style={{position:"absolute",bottom:8,right:8,background:"rgba(0,0,0,0.55)",border:"none",borderRadius:8,padding:"4px 10px",cursor:"pointer",color:"#fff",fontSize:11}}>Trocar foto</button>
+                  {canEdit && <>
+                    <button onClick={()=>handlePhotoChange(null)} style={{position:"absolute",top:8,right:8,background:"rgba(0,0,0,0.55)",border:"none",borderRadius:"50%",width:28,height:28,cursor:"pointer",color:"#fff",fontSize:14}}>×</button>
+                    <button onClick={()=>photoInputRef.current.click()} style={{position:"absolute",bottom:8,right:8,background:"rgba(0,0,0,0.55)",border:"none",borderRadius:8,padding:"4px 10px",cursor:"pointer",color:"#fff",fontSize:11}}>Trocar foto</button>
+                  </>}
                 </div>
-              ) : (
+              ) : canEdit ? (
                 <button onClick={()=>photoInputRef.current.click()} style={{width:"100%",padding:18,border:`2px dashed ${T.borderMid}`,borderRadius:12,background:T.bgMuted,cursor:"pointer",color:T.textSoft,fontSize:13,display:"flex",flexDirection:"column",alignItems:"center",gap:6,fontFamily:T.font}}>
                   <span style={{fontSize:28}}>📷</span><span>Adicionar foto do prato</span>
                 </button>
+              ) : (
+                <div style={{textAlign:"center",padding:"32px 0",color:T.textFaint,fontSize:13}}>
+                  <span style={{fontSize:32,display:"block",marginBottom:8}}>📷</span>
+                  Nenhuma foto adicionada
+                </div>
               )}
             </div>
           )}
@@ -703,10 +718,12 @@ function RecipeModal({ recipe, onClose, onUpdate, onShare, onEdit }) {
           )}
           {/* Botões de ação */}
           <div style={{display:"flex",gap:10,marginTop:24}}>
-            <button onClick={()=>onEdit(recipe)} style={{flex:1,padding:"12px",border:`1.5px solid ${T.borderMid}`,borderRadius:12,background:"transparent",color:T.textMid,cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:T.font,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-              ✏️ Editar receita
-            </button>
-            <button onClick={()=>onShare(recipe)} style={{flex:1,padding:"12px",border:"none",borderRadius:12,background:T.header,color:T.accentLt,cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:T.font,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            {canEdit && (
+              <button onClick={()=>onEdit(recipe)} style={{flex:1,padding:"12px",border:`1.5px solid ${T.borderMid}`,borderRadius:12,background:"transparent",color:T.textMid,cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:T.font,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                ✏️ Editar receita
+              </button>
+            )}
+            <button onClick={()=>onShare(recipe)} style={{flex:canEdit?1:2,padding:"12px",border:"none",borderRadius:12,background:T.header,color:T.accentLt,cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:T.font,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
               ↗ Compartilhar
             </button>
           </div>
@@ -783,10 +800,72 @@ function AddRecipeModal({ onClose, onSave }) {
   );
 }
 
+// ─── LOGIN MODAL ─────────────────────────────────────────────────────────────
+function LoginModal({ onClose }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      onClose();
+    } catch (err) {
+      const msgs = {
+        "auth/invalid-credential": "E-mail ou senha incorretos.",
+        "auth/user-not-found":     "E-mail ou senha incorretos.",
+        "auth/wrong-password":     "E-mail ou senha incorretos.",
+        "auth/too-many-requests":  "Muitas tentativas. Tente novamente mais tarde.",
+        "auth/invalid-email":      "E-mail inválido.",
+      };
+      setError(msgs[err.code] || "Erro ao entrar. Tente novamente.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const s = { width:"100%", padding:"10px 14px", border:`1px solid ${T.borderMid}`, borderRadius:10, fontSize:14, color:T.text, background:T.bgCard, boxSizing:"border-box", fontFamily:T.font, outline:"none" };
+  const L = ({ children }) => <label style={{ display:"block", fontSize:12, fontWeight:700, color:T.textMid, marginBottom:6, letterSpacing:0.5, textTransform:"uppercase" }}>{children}</label>;
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(20,14,8,0.78)", zIndex:300, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }} onClick={onClose}>
+      <div style={{ background:T.bgCard, borderRadius:20, maxWidth:380, width:"100%", boxShadow:"0 24px 64px rgba(0,0,0,0.3)", fontFamily:T.font }} onClick={e=>e.stopPropagation()}>
+        <div style={{ background:T.header, padding:"24px 28px", borderRadius:"20px 20px 0 0", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:11, letterSpacing:3, color:T.accentLt, textTransform:"uppercase", marginBottom:4 }}>Área da família</div>
+            <h2 style={{ margin:0, color:"#fff", fontSize:"1.15rem" }}>🔐 Entrar</h2>
+          </div>
+          <button onClick={onClose} style={{ background:"rgba(255,255,255,0.15)", border:"none", borderRadius:"50%", width:32, height:32, cursor:"pointer", color:"#fff", fontSize:18 }}>×</button>
+        </div>
+        <form onSubmit={handleLogin} style={{ padding:"24px 28px" }}>
+          <div style={{ marginBottom:16 }}><L>E-mail</L><input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" required style={s}/></div>
+          <div style={{ marginBottom:20 }}><L>Senha</L><input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password" required style={s}/></div>
+          {error && (
+            <div style={{ background:"#fde8e8", border:"1px solid #f4a8a8", borderRadius:10, padding:"10px 14px", fontSize:13, color:"#a02020", marginBottom:16 }}>{error}</div>
+          )}
+          <button type="submit" disabled={loading} style={{ width:"100%", padding:13, border:"none", borderRadius:12, background:loading?T.textSoft:T.header, color:T.accentLt, cursor:loading?"default":"pointer", fontSize:14, fontWeight:700, fontFamily:T.font }}>
+            {loading ? "Entrando..." : "Entrar"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(undefined); // undefined = verificando, null = não autenticado
+  const [showLogin, setShowLogin] = useState(false);
+
+  useEffect(() => {
+    return onAuthStateChanged(auth, setUser);
+  }, []);
 
   // Sincroniza com o Firebase em tempo real
   useEffect(() => {
@@ -851,7 +930,7 @@ export default function App() {
     <div style={{minHeight:"100vh",background:T.bg,fontFamily:T.font}}>
       <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet"/>
 
-      {loading && (
+      {(loading || user === undefined) && (
         <div style={{position:"fixed",inset:0,background:T.header,zIndex:999,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
           <svg width="80" height="60" viewBox="0 0 160 96" fill="none">
             <path d="M52 28 Q47 18 52 8" stroke="#d4a56a" strokeWidth="2.4" strokeLinecap="round" opacity="0.65"/>
@@ -926,13 +1005,24 @@ export default function App() {
         </div>
 
         {/* Botões */}
-        <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
-          <button onClick={()=>setShowImport(true)} style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:20,padding:"9px 16px",cursor:"pointer",color:T.accentPale,fontSize:12,fontWeight:700,fontFamily:T.font,display:"flex",alignItems:"center",gap:5}}>
-            📥 Importar
-          </button>
-          <button onClick={()=>setShowAdd(true)} style={{background:T.accentLt,border:"none",borderRadius:20,padding:"9px 16px",cursor:"pointer",color:T.header,fontSize:12,fontWeight:700,fontFamily:T.font,display:"flex",alignItems:"center",gap:5}}>
-            + Nova Receita
-          </button>
+        <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap",alignItems:"center"}}>
+          {user ? (
+            <>
+              <button onClick={()=>setShowImport(true)} style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:20,padding:"9px 16px",cursor:"pointer",color:T.accentPale,fontSize:12,fontWeight:700,fontFamily:T.font,display:"flex",alignItems:"center",gap:5}}>
+                📥 Importar
+              </button>
+              <button onClick={()=>setShowAdd(true)} style={{background:T.accentLt,border:"none",borderRadius:20,padding:"9px 16px",cursor:"pointer",color:T.header,fontSize:12,fontWeight:700,fontFamily:T.font,display:"flex",alignItems:"center",gap:5}}>
+                + Nova Receita
+              </button>
+              <button onClick={()=>signOut(auth)} style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:20,padding:"9px 14px",cursor:"pointer",color:"#a07858",fontSize:11,fontFamily:T.font,display:"flex",alignItems:"center",gap:4}}>
+                Sair
+              </button>
+            </>
+          ) : (
+            <button onClick={()=>setShowLogin(true)} style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:20,padding:"9px 16px",cursor:"pointer",color:T.accentPale,fontSize:12,fontWeight:700,fontFamily:T.font,display:"flex",alignItems:"center",gap:5}}>
+              🔑 Entrar
+            </button>
+          )}
         </div>
       </div>
 
@@ -1023,11 +1113,12 @@ export default function App() {
         </div>
       </div>
 
-      {selected&&<RecipeModal recipe={selected} onClose={()=>setSelected(null)} onUpdate={handleUpdate} onShare={r=>{setSelected(null);setShareRecipe(r);}} onEdit={r=>{setSelected(null);setEditRecipe(r);}}/>}
+      {selected&&<RecipeModal recipe={selected} user={user} onClose={()=>setSelected(null)} onUpdate={handleUpdate} onShare={r=>{setSelected(null);setShareRecipe(r);}} onEdit={r=>{setSelected(null);setEditRecipe(r);}}/>}
       {showAdd&&<AddRecipeModal onClose={()=>setShowAdd(false)} onSave={async r=>{await saveRecipe(r);}}/>}
       {showImport&&<ImportModal onClose={()=>setShowImport(false)} onImported={handleImported}/>}
       {shareRecipe&&<ShareModal recipe={shareRecipe} onClose={()=>setShareRecipe(null)}/>}
       {editRecipe&&<EditRecipeModal recipe={editRecipe} onClose={()=>setEditRecipe(null)} onSave={async r=>{await handleUpdate(r); setEditRecipe(null);}}/>}
+      {showLogin&&<LoginModal onClose={()=>setShowLogin(false)}/>}
     </div>
   );
 }
